@@ -7,6 +7,7 @@ from px4_msgs.msg import VehicleOdometry
 import csv
 import os
 from datetime import datetime
+import numpy as np
 
 from kf_vio_pnp.kf_vio_pnp import VioAugmentedKalmanFilter, KFConfig
 
@@ -169,8 +170,10 @@ class KFNode(Node):
         p, v, b, P = self.kf.get_state()
         msg = VehicleOdometry()
         msg.timestamp = int(t * 1e6)
-        msg.position = p
-        msg.velocity = v
+        
+        # convert p, v to float32 for VehicleOdometry message
+        msg.position = np.array(p, dtype=np.float32).tolist()
+        msg.velocity = np.array(v, dtype=np.float32).tolist()
         
         self.pub_fused.publish(msg)
 
