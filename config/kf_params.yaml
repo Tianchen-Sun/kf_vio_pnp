@@ -5,3 +5,8 @@ kf_vio_pnp_node:
     vio_pos_std: 0.20
     vio_vel_std: 0.30
     pnp_pos_std: 0.03
+
+    # Initial state
+    initial_pos_x: 0.0
+    initial_pos_y: 0.0
+    initial_pos_z: 0.0
