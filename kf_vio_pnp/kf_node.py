@@ -24,6 +24,7 @@ class KFNode(Node):
         self.declare_parameter('initial_pos_x', 0.0)
         self.declare_parameter('initial_pos_y', 0.0)
         self.declare_parameter('initial_pos_z', 0.0)
+        self.declare_parameter('mocap_as_pnp', False)
 
         # Get parameters
         cfg = KFConfig(
@@ -32,12 +33,10 @@ class KFNode(Node):
             vio_pos_std=self.get_parameter('vio_pos_std').value,
             vio_vel_std=self.get_parameter('vio_vel_std').value,
             pnp_pos_std=self.get_parameter('pnp_pos_std').value,
-            initial_pos=[
-                self.get_parameter('initial_pos_x').value,
-                self.get_parameter('initial_pos_y').value,
-                self.get_parameter('initial_pos_z').value
-            ]
         )
+        self.mocap_as_pnp=self.get_parameter('mocap_as_pnp').value
+        self.init_vel = [0.0, 0.0, 0.0]
+
         self.kf = VioAugmentedKalmanFilter(cfg)
         self.initialized = False
 
@@ -53,13 +52,26 @@ class KFNode(Node):
             self.vio_callback,
             10
         )
-        self.sub_pnp = self.create_subscription(
-            PoseStamped,
-            '/pnp_pose',
-            self.pnp_callback,
-            10
-        )
 
+        if self.mocap_as_pnp:
+            self.sub_pnp = self.create_subscription(
+                PoseStamped,
+                '/charpi_comp_2/vrpn_client_node/pose',
+                self.pnp_callback,
+                10
+            )
+
+            # skip 100 count mocap data to simulate low-frequency PnP
+            self.mocap_count = 0
+
+        else:
+            self.sub_pnp = self.create_subscription(
+                PoseStamped,
+                '/pnp_pose',
+                self.pnp_callback,
+                10
+            )
+   
         # Publisher for the fused state
         self.pub_fused = self.create_publisher(VehicleOdometry, '/fmu/in/vehicle_visual_odometry', 10)
 
@@ -131,9 +143,23 @@ class KFNode(Node):
         pos = [msg.pose.position.x, msg.pose.position.y, msg.pose.position.z]
 
         if not self.initialized:
-            self.init_filter(t, pos, [0.0, 0.0, 0.0])
+            self.init_filter(
+                t, pos, self.init_vel
+            )
+            
             return
+        
+        if self.mocap_as_pnp:
+            # Simulate low-frequency PnP by skipping some mocap messages
+            self.mocap_count += 1
+            
+            # avoid mocap_count too large                
+            if self.mocap_count > 10000:
+                self.mocap_count = 1
 
+            if self.mocap_count % 100 != 0:   
+                return
+            
         event = {"t": t, "type": "pnp", "pos": pos}
         self.kf.process_event(event)
         self.publish_fused(t)
