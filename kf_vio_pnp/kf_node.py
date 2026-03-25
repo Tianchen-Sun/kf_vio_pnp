@@ -4,6 +4,9 @@ from rclpy.time import Time
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleOdometry
+import csv
+import os
+from datetime import datetime
 
 from kf_vio_pnp.kf_vio_pnp import VioAugmentedKalmanFilter, KFConfig
 
@@ -38,6 +41,11 @@ class KFNode(Node):
         self.kf = VioAugmentedKalmanFilter(cfg)
         self.initialized = False
 
+        # CSV logging setup
+        self.csv_file = None
+        self.csv_writer = None
+        self.bias_log_path = None
+
         # Subscribers
         self.sub_vio = self.create_subscription(
             Odometry,
@@ -55,9 +63,51 @@ class KFNode(Node):
         # Publisher for the fused state
         self.pub_fused = self.create_publisher(VehicleOdometry, '/fmu/in/vehicle_visual_odometry', 10)
 
+    def start_bias_logging(self, t):
+        """Initialize CSV file for bias data logging"""
+        try:
+            # Create logs directory if it doesn't exist
+            log_dir = os.path.expanduser('./logs')
+            os.makedirs(log_dir, exist_ok=True)
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            self.bias_log_path = os.path.join(log_dir, f'bias_data_{timestamp}.csv')
+            
+            # Open CSV file and write header
+            self.csv_file = open(self.bias_log_path, 'w', newline='')
+            self.csv_writer = csv.writer(self.csv_file)
+            self.csv_writer.writerow(['timestamp', 'bias_x', 'bias_y', 'bias_z'])
+            
+            self.get_logger().info(f"Bias logging started: {self.bias_log_path}")
+        except Exception as e:
+            self.get_logger().error(f"Failed to start bias logging: {e}")
+
+    def log_bias(self, t):
+        """Log current bias state to CSV file"""
+        if self.csv_writer is None:
+            return
+        
+        try:
+            p, v, b, P = self.kf.get_state()
+            self.csv_writer.writerow([t, b[0], b[1], b[2]])
+            self.csv_file.flush()
+        except Exception as e:
+            self.get_logger().error(f"Failed to log bias: {e}")
+
+    def stop_bias_logging(self):
+        """Close CSV file"""
+        if self.csv_file is not None:
+            try:
+                self.csv_file.close()
+                self.get_logger().info(f"Bias logging stopped. Data saved to: {self.bias_log_path}")
+            except Exception as e:
+                self.get_logger().error(f"Failed to close bias log: {e}")
+
     def init_filter(self, t, pos, vel):
         self.kf.init_state(pos=pos, vel=vel, t0=t)
         self.initialized = True
+        self.start_bias_logging(t)
         self.get_logger().info(f"Kalman filter initialized at t={t}")
 
     def vio_callback(self, msg: Odometry):
@@ -73,6 +123,7 @@ class KFNode(Node):
         event = {"t": t, "type": "vio", "pos": pos, "vel": vel}
         self.kf.process_event(event)
         self.publish_fused(t)
+        self.log_bias(t)
 
     def pnp_callback(self, msg: PoseStamped):
         # Convert std_msgs/Header timestamp to float seconds
@@ -86,6 +137,7 @@ class KFNode(Node):
         event = {"t": t, "type": "pnp", "pos": pos}
         self.kf.process_event(event)
         self.publish_fused(t)
+        self.log_bias(t)
 
     def publish_fused(self, t):
         p, v, b, P = self.kf.get_state()
@@ -99,9 +151,12 @@ class KFNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = KFNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    finally:
+        node.stop_bias_logging()
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
