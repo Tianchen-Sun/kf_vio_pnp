@@ -53,7 +53,7 @@ class KFNode(Node):
         )
 
         # Publisher for the fused state
-        self.pub_fused = self.create_publisher(VehicleOdometry, '/fmu/in/visual_odometry', 10)
+        self.pub_fused = self.create_publisher(VehicleOdometry, '/fmu/in/vehicle_visual_odometry', 10)
 
     def init_filter(self, t, pos, vel):
         self.kf.init_state(pos=pos, vel=vel, t0=t)
