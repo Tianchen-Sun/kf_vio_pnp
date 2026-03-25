@@ -5,5 +5,5 @@
 
 ## run the node
 ```
-ros2 launch kf_vio_pnp kf_vio_gate.python.launch.py
+ros2 launch kf_vio_pnp kf_vio_pnp.python.launch.py
 ```

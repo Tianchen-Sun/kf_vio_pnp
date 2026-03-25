@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', ['config/kf_params.yaml']),
-        ('share/' + package_name + '/launch', ['launch/kf_vio_gate.python.launch.py']),
+        ('share/' + package_name + '/launch', ['launch/kf_vio_pnp.python.launch.py']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
