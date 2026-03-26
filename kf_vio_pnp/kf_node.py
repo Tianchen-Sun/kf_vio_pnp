@@ -80,7 +80,7 @@ class KFNode(Node):
         # IMU subscription - get linear acceleration
         self.sub_imu = self.create_subscription(
             VehicleLocalPosition,
-            '/fmu/out/local_position',
+            '/fmu/out/vehicle_local_position',
             self.imu_callback,
             10
         )
