@@ -12,10 +12,6 @@ class Transform:
         """
         Initialize transformation parameters.
         VIO frame pose relative to PnP frame.
-        
-        Args:
-            vio_yaw_rel_pnp: Yaw angle of VIO frame relative to PnP frame (radians)
-            vio_translation_rel_pnp: Translation of VIO frame origin relative to PnP frame [x, y, z]
         """
         self.vio_yaw_rel_pnp = vio_yaw_rel_pnp
         self.vio_translation_rel_pnp = np.array(vio_translation_rel_pnp) if vio_translation_rel_pnp is not None else np.array([0.0, 0.0, 0.0])
@@ -24,16 +20,14 @@ class Transform:
     
     def _compute_rotation_matrices(self):
         """Compute rotation matrices for yaw angle"""
-        # Rotation matrix from VIO to PnP (yaw only)
         cos_y = np.cos(self.vio_yaw_rel_pnp)
         sin_y = np.sin(self.vio_yaw_rel_pnp)
         self.R_vio_to_pnp = np.array([
             [cos_y, -sin_y, 0],
             [sin_y, cos_y, 0],
             [0, 0, 1]
-        ])
+        ], dtype=float)
         
-        # Rotation matrix from PnP to VIO (inverse)
         self.R_pnp_to_vio = self.R_vio_to_pnp.T
     
     def set_vio_frame(self, yaw, translation=None):
@@ -44,68 +38,112 @@ class Transform:
         self._compute_rotation_matrices()
     
     def pnp_to_vio(self, pnp_position):
-        """
-        Transform position from PnP frame to VIO frame.
-        
-        Args:
-            pnp_position: Position vector in PnP frame [x, y, z]
-            
-        Returns:
-            Position vector in VIO frame [x, y, z]
-        """
-        pnp_pos = np.array(pnp_position)
-        
-        # Step 1: Remove VIO origin translation (expressed in PnP frame)
+        """Transform position from PnP frame to VIO frame."""
+        pnp_pos = np.array(pnp_position, dtype=float)
         pos_relative = pnp_pos - self.vio_translation_rel_pnp
-        
-        # Step 2: Rotate from PnP frame to VIO frame
         pos_vio = self.R_pnp_to_vio @ pos_relative
-        
         return pos_vio
     
     def vio_to_pnp(self, vio_position):
-        """
-        Transform position from VIO frame to PnP frame.
-        
-        Args:
-            vio_position: Position vector in VIO frame [x, y, z]
-            
-        Returns:
-            Position vector in PnP frame [x, y, z]
-        """
-        vio_pos = np.array(vio_position)
-        
-        # Step 1: Rotate from VIO frame to PnP frame
+        """Transform position from VIO frame to PnP frame."""
+        vio_pos = np.array(vio_position, dtype=float)
         pos_pnp_relative = self.R_vio_to_pnp @ vio_pos
-        
-        # Step 2: Add VIO origin translation (expressed in PnP frame)
         pos_pnp = pos_pnp_relative + self.vio_translation_rel_pnp
-        
         return pos_pnp
     
-    def __call__(self, pnp_position):
+    def yaw_vio_to_pnp(self, yaw_vio):
+        """Transform yaw angle from VIO frame to PnP frame"""
+        return yaw_vio + self.vio_yaw_rel_pnp
+
+    def euler_to_quaternion(self, roll, pitch, yaw):
         """
-        Transform PnP position to VIO frame (alias for pnp_to_vio).
+        Convert Euler angles (roll, pitch, yaw) to quaternion (x, y, z, w)
         
         Args:
-            pnp_position: Position vector in PnP frame [x, y, z]
+            roll, pitch, yaw: Euler angles in radians
             
         Returns:
-            Position vector in VIO frame [x, y, z]
+            Quaternion as [x, y, z, w] (ROS standard format)
         """
-        return self.pnp_to_vio(pnp_position)
+        cy = np.cos(yaw * 0.5)
+        sy = np.sin(yaw * 0.5)
+        cp = np.cos(pitch * 0.5)
+        sp = np.sin(pitch * 0.5)
+        cr = np.cos(roll * 0.5)
+        sr = np.sin(roll * 0.5)
+
+        qw = cr * cp * cy + sr * sp * sy
+        qx = sr * cp * cy - cr * sp * sy
+        qy = cr * sp * cy + sr * cp * sy
+        qz = cr * cp * sy - sr * sp * cy
+
+        return np.array([qx, qy, qz, qw])
+    
+    def quaternion_to_euler(self, qx, qy, qz, qw):
+        """
+        Convert quaternion (x, y, z, w) to Euler angles (roll, pitch, yaw)
+        
+        Args:
+            qx, qy, qz, qw: Quaternion components
+            
+        Returns:
+            Euler angles as (roll, pitch, yaw) in radians
+        """
+        # Roll (x-axis rotation)
+        sinr_cosp = 2 * (qw * qx + qy * qz)
+        cosr_cosp = 1 - 2 * (qx * qx + qy * qy)
+        roll = np.arctan2(sinr_cosp, cosr_cosp)
+
+        # Pitch (y-axis rotation)
+        sinp = 2 * (qw * qy - qz * qx)
+        sinp = np.clip(sinp, -1, 1)
+        pitch = np.arcsin(sinp)
+
+        # Yaw (z-axis rotation)
+        siny_cosp = 2 * (qw * qz + qx * qy)
+        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+        yaw = np.arctan2(siny_cosp, cosy_cosp)
+
+        return roll, pitch, yaw
+
+    def yaw_to_quaternion(self, yaw):
+        """
+        Convert yaw angle to quaternion (assuming roll=0, pitch=0)
+        
+        Args:
+            yaw: Yaw angle in radians
+            
+        Returns:
+            Quaternion as [x, y, z, w] (ROS standard format)
+        """
+        half_yaw = yaw / 2.0
+        return np.array([
+            0.0,                    # qx
+            0.0,                    # qy
+            np.sin(half_yaw),       # qz
+            np.cos(half_yaw)        # qw
+        ])
+    
+    def quaternion_to_yaw(self, q):
+        """
+        Extract yaw angle from quaternion
+        
+        Args:
+            q: Quaternion as [x, y, z, w]
+            
+        Returns:
+            Yaw angle in radians
+        """
+        qx, qy, qz, qw = q
+        # Extract yaw from quaternion
+        siny_cosp = 2 * (qw * qz + qx * qy)
+        cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+        yaw = np.arctan2(siny_cosp, cosy_cosp)
+        return yaw
 
 
 def rotation_matrix_yaw(yaw):
-    """
-    Create a rotation matrix for yaw angle only.
-    
-    Args:
-        yaw: Yaw angle in radians
-        
-    Returns:
-        3x3 rotation matrix
-    """
+    """Create a rotation matrix for yaw angle only."""
     cos_y = np.cos(yaw)
     sin_y = np.sin(yaw)
     return np.array([
@@ -116,29 +154,11 @@ def rotation_matrix_yaw(yaw):
 
 
 def apply_rotation(position, yaw):
-    """
-    Apply yaw rotation to a position vector.
-    
-    Args:
-        position: Position vector [x, y, z]
-        yaw: Yaw angle in radians
-        
-    Returns:
-        Rotated position vector
-    """
+    """Apply yaw rotation to a position vector."""
     R = rotation_matrix_yaw(yaw)
     return R @ np.array(position)
 
 
 def apply_translation(position, translation):
-    """
-    Apply translation to a position vector.
-    
-    Args:
-        position: Position vector [x, y, z]
-        translation: Translation vector [x, y, z]
-        
-    Returns:
-        Translated position vector
-    """
+    """Apply translation to a position vector."""
     return np.array(position) + np.array(translation)

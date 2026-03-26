@@ -1,16 +1,19 @@
 kf_vio_pnp_node:
   ros__parameters:
     vio_delay_compensation: true
-    vio_delay_sec: 0.5 # seconds
+    vio_delay_sec: 0.1 # seconds
     accel_noise_std: 0.1 # std for accelerometer noise for vio vel, unit (m/s^2)
-    bias_rw_std: 0.02 # random walk std for position bias, unit (m/s per sqrt(s))
-    vio_pos_std: 0.30
-    vio_vel_std: 0.30
+    vio_bias_rw_std: 0.005 # random walk std for position bias, unit (m/s per sqrt(s))
+    vio_pos_std: 0.10
+    vio_vel_std: 0.80
     pnp_pos_std: 0.03
 
     # debug
     mocap_as_pnp: true
-    mocap_freq: 1.0 # hz
+    mocap_mode: 'periodic' # 'periodic' or 'downsample'
+    mocap_freq: 10.0 # hz, assume the full freq of mocap is 100 hz
+    mocap_available_duration: 2.0 # seconds
+    mocap_unavailable_duration: 5.0 # seconds
 
     # initial position for vio in pnp frame, unit (m)
     initial_pos_x: 0.085
