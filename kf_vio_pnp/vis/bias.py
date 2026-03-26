@@ -92,5 +92,5 @@ def plot_bias_visualization(csv_file_path):
 
 # Usage example:
 if __name__ == "__main__":
-    csv_path = "data/logs/bias_data_20260326_193610.csv"  # Update with your actual CSV file path
+    csv_path = "data/logs/bias_data_20260326_200154.csv"  # Update with your actual CSV file path
     plot_bias_visualization(csv_path)
