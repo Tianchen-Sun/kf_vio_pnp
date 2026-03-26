@@ -15,11 +15,15 @@ class KFConfig:
 
     # PnP obs noise (more reliable)
     pnp_pos_std: float = 0.03
+    
+    # VIO delay compensation
+    vio_delay_compensation: bool = False  # Enable delay-aware prediction
+    vio_delay_sec: float = 0.0  # VIO delay in seconds
 
 
 class VioAugmentedKalmanFilter:
     """
-    Augmented state KF
+    Augmented state KF with optional VIO delay compensation
     State: [px, py, pz, vx, vy, vz, bx, by, bz]^T
       p: true position
       v: true velocity
@@ -31,6 +35,7 @@ class VioAugmentedKalmanFilter:
         self.x = np.zeros((9, 1), dtype=float)
         self.P = np.eye(9, dtype=float)
         self.t = None
+        self.t_vio_last = None  # Track last VIO update time
 
     def init_state(
         self,
@@ -39,7 +44,7 @@ class VioAugmentedKalmanFilter:
         bias=(0.0, 0.0, 0.0),
         pos_var=1.0,
         vel_var=1.0,
-        bias_var=0.25,  # (0.5m)^2 默认较宽松
+        bias_var=0.25,
         t0=0.0
     ):
         self.x[0:3, 0] = np.asarray(pos, dtype=float)
@@ -53,15 +58,20 @@ class VioAugmentedKalmanFilter:
         ]).astype(float)
 
         self.t = float(t0)
+        self.t_vio_last = float(t0)
 
-    def _build_F_Q(self, dt: float):
+    def _build_F_Q(self, dt: float, is_vio_update: bool = False):
+        """
+        Build state transition and noise matrices.
+        If is_vio_update=True, add extra noise to account for VIO delay uncertainty.
+        """
         # F: constant velocity + bias random walk
         F = np.eye(9, dtype=float)
         F[0, 3] = dt
         F[1, 4] = dt
         F[2, 5] = dt
 
-        # Q for [p,v]
+        # Base Q for [p,v] from acceleration noise
         q = self.cfg.accel_noise_std ** 2
         dt2, dt3, dt4 = dt * dt, dt**3, dt**4
         Q_block = q * np.array([[dt4 / 4.0, dt3 / 2.0],
@@ -72,7 +82,16 @@ class VioAugmentedKalmanFilter:
         Q[np.ix_([1, 4], [1, 4])] = Q_block
         Q[np.ix_([2, 5], [2, 5])] = Q_block
 
-        # Q for bias random walk: b_{k+1} = b_k + w_b
+        # Add delay-aware uncertainty for VIO updates
+        if is_vio_update and self.cfg.vio_delay_compensation and self.cfg.vio_delay_sec > 0:
+            # Extra noise due to VIO latency: position uncertainty grows
+            # during the delay period (worse accuracy of delayed measurements)
+            delay_uncertainty = (self.cfg.vio_delay_sec ** 2) * self.cfg.accel_noise_std ** 2
+            Q[0, 0] += delay_uncertainty
+            Q[1, 1] += delay_uncertainty
+            Q[2, 2] += delay_uncertainty
+
+        # Q for bias random walk
         qb = (self.cfg.bias_rw_std ** 2) * max(dt, 1e-6)
         Q[6, 6] = qb
         Q[7, 7] = qb
@@ -102,15 +121,18 @@ class VioAugmentedKalmanFilter:
 
         self.x = self.x + K @ y
 
-        # Joseph form
+        # Joseph form covariance update
         I = np.eye(self.P.shape[0], dtype=float)
         IKH = I - K @ H
         self.P = IKH @ self.P @ IKH.T + K @ R @ K.T
 
     def update_vio(self, vio_pos, vio_vel):
         """
-        VIO measurement model:
+        VIO measurement model with optional delay consideration:
           z_vio = [p + b, v]
+        
+        If delay compensation enabled, increase measurement noise
+        to account for stale VIO data.
         """
         z = np.hstack([vio_pos, vio_vel])
 
@@ -132,7 +154,14 @@ class VioAugmentedKalmanFilter:
             self.cfg.vio_vel_std**2, self.cfg.vio_vel_std**2, self.cfg.vio_vel_std**2
         ]).astype(float)
 
+        # Increase noise if VIO delay compensation enabled
+        # Delayed measurements are less trustworthy
+        if self.cfg.vio_delay_compensation and self.cfg.vio_delay_sec > 0:
+            delay_factor = 1.0 + (self.cfg.vio_delay_sec * 2.0)  # Increase noise proportional to delay
+            R = R * delay_factor
+            
         self._update(z, H, R)
+        self.t_vio_last = self.t
 
     def update_pnp(self, pnp_pos):
         """
@@ -175,7 +204,6 @@ class VioAugmentedKalmanFilter:
             raise ValueError(f"Unknown event type: {event['type']}")
 
     def get_state(self):
-        # return (p, v, b) + full covariance
         p = self.x[0:3, 0].copy()
         v = self.x[3:6, 0].copy()
         b = self.x[6:9, 0].copy()
@@ -188,7 +216,9 @@ if __name__ == "__main__":
         bias_rw_std=0.01,
         vio_pos_std=0.20,
         vio_vel_std=0.30,
-        pnp_pos_std=0.03
+        pnp_pos_std=0.03,
+        vio_delay_compensation=True,
+        vio_delay_sec=0.05
     )
 
     kf = VioAugmentedKalmanFilter(cfg)

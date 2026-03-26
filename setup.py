@@ -1,3 +1,4 @@
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'kf_vio_pnp'
@@ -12,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/config', ['config/kf_params.yaml']),
         ('share/' + package_name + '/launch', ['launch/kf_vio_pnp.python.launch.py']),
+        ('share/' + package_name + '/data',  glob('data/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

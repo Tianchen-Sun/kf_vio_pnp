@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
+from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleOdometry
@@ -17,6 +18,8 @@ class KFNode(Node):
         super().__init__('kf_vio_pnp_node')
 
         # Declare parameters
+        self.declare_parameter('vio_delay_compensation', True)
+        self.declare_parameter('vio_delay_sec', 0.05)
         self.declare_parameter('accel_noise_std', 1.0)
         self.declare_parameter('bias_rw_std', 0.02)
         self.declare_parameter('vio_pos_std', 0.20)
@@ -26,6 +29,7 @@ class KFNode(Node):
         self.declare_parameter('initial_pos_y', 0.0)
         self.declare_parameter('initial_pos_z', 0.0)
         self.declare_parameter('mocap_as_pnp', False)
+        self.declare_parameter('mocap_freq', 100.0)
 
         # Get parameters
         cfg = KFConfig(
@@ -34,8 +38,11 @@ class KFNode(Node):
             vio_pos_std=self.get_parameter('vio_pos_std').value,
             vio_vel_std=self.get_parameter('vio_vel_std').value,
             pnp_pos_std=self.get_parameter('pnp_pos_std').value,
+            vio_delay_compensation=self.get_parameter('vio_delay_compensation').value,
+            vio_delay_sec=self.get_parameter('vio_delay_sec').value
         )
         self.mocap_as_pnp=self.get_parameter('mocap_as_pnp').value
+        self.mocap_freq=self.get_parameter('mocap_freq').value
 
         self.transform = Transform(
             vio_yaw_rel_pnp=-1.57, # rad
@@ -90,8 +97,11 @@ class KFNode(Node):
     def start_bias_logging(self, t):
         """Initialize CSV file for bias data logging"""
         try:
-            # Create logs directory if it doesn't exist
-            log_dir = os.path.expanduser('./logs')
+            # Get workspace root: install/share/kf_vio_pnp -> src/kf_vio_pnp/data/logs
+            package_dir = get_package_share_directory('kf_vio_pnp')
+            workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(package_dir)))
+            log_dir = os.path.join(workspace_root, 'src', 'kf_vio_pnp', 'data', 'logs')
+            
             os.makedirs(log_dir, exist_ok=True)
             
             # Create filename with timestamp
@@ -175,7 +185,7 @@ class KFNode(Node):
             if self.mocap_count > 10000:
                 self.mocap_count = 1
 
-            if self.mocap_count % 100 != 0:   
+            if self.mocap_count % (100*(1/self.mocap_freq)) != 0:   
                 return
             
         event = {"t": t, "type": "pnp", "pos": pos}
