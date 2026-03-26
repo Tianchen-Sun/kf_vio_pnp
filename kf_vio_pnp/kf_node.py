@@ -10,7 +10,7 @@ from datetime import datetime
 import numpy as np
 
 from kf_vio_pnp.kf_vio_pnp import VioAugmentedKalmanFilter, KFConfig
-
+from kf_vio_pnp.transform import Transform
 
 class KFNode(Node):
     def __init__(self):
@@ -36,6 +36,17 @@ class KFNode(Node):
             pnp_pos_std=self.get_parameter('pnp_pos_std').value,
         )
         self.mocap_as_pnp=self.get_parameter('mocap_as_pnp').value
+
+        self.transform = Transform(
+            vio_yaw_rel_pnp=-1.57, # rad
+            vio_translation_rel_pnp=[
+                self.get_parameter('initial_pos_x').value,
+                self.get_parameter('initial_pos_y').value,
+                self.get_parameter('initial_pos_z').value
+            ]
+        )
+
+        
         self.init_vel = [0.0, 0.0, 0.0]
 
         self.kf = VioAugmentedKalmanFilter(cfg)
@@ -57,7 +68,7 @@ class KFNode(Node):
         if self.mocap_as_pnp:
             self.sub_pnp = self.create_subscription(
                 PoseStamped,
-                '/charpi_comp_2/vrpn_client_node/pose',
+                '/mavros/vision_pose/pose',
                 self.pnp_callback,
                 10
             )
@@ -122,6 +133,8 @@ class KFNode(Node):
         self.initialized = True
         self.start_bias_logging(t)
         self.get_logger().info(f"Kalman filter initialized at t={t}")
+        # ros output rotation matrix
+        self.get_logger().info(f"Rotation matrix from VIO to PnP:\n{self.transform.R_vio_to_pnp}")
 
     def vio_callback(self, msg: Odometry):
         # Convert timestamp to float seconds
@@ -129,11 +142,15 @@ class KFNode(Node):
         pos = [msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.position.z]
         vel = [msg.twist.twist.linear.x, msg.twist.twist.linear.y, msg.twist.twist.linear.z]
 
+        # transform vio to pnp frame
+        pos_transformed = self.transform.vio_to_pnp(pos)
+        vel_transformed = self.transform.vio_to_pnp(vel)
+
         if not self.initialized:
-            self.init_filter(t, pos, vel)
+            self.init_filter(t, pos_transformed, vel_transformed)
             return
 
-        event = {"t": t, "type": "vio", "pos": pos, "vel": vel}
+        event = {"t": t, "type": "vio", "pos": pos_transformed, "vel": vel_transformed}
         self.kf.process_event(event)
         self.publish_fused(t)
         self.log_bias(t)
