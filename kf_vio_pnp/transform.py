@@ -142,6 +142,80 @@ class Transform:
         return yaw
 
 
+class ENUtoNEDTransform:
+    """
+    Transform class for coordinate transformation between ENU and NED frames.
+    ENU: East-North-Up coordinate system (Z points up)
+    NED: North-East-Down coordinate system (Z points down)
+    """
+    
+    def __init__(self):
+        """Initialize ENU to NED transformation."""
+        # Transformation matrix from ENU to NED
+        # ENU: [East, North, Up] -> NED: [North, East, -Up]
+        self.T_enu_to_ned = np.array([
+            [0, 1, 0],   # NED_x = ENU_y (North)
+            [1, 0, 0],   # NED_y = ENU_x (East)
+            [0, 0, -1]   # NED_z = -ENU_z (Down)
+        ], dtype=float)
+        
+        self.T_ned_to_enu = self.T_enu_to_ned.T
+    
+    def enu_to_ned_position(self, enu_position):
+        """
+        Transform position from ENU frame to NED frame.
+        
+        Args:
+            enu_position: Position as [east, north, up]
+            
+        Returns:
+            Position in NED frame as [north, east, down]
+        """
+        enu_pos = np.array(enu_position, dtype=float)
+        ned_pos = self.T_enu_to_ned @ enu_pos
+        return ned_pos
+    
+    def ned_to_enu_position(self, ned_position):
+        """
+        Transform position from NED frame to ENU frame.
+        
+        Args:
+            ned_position: Position as [north, east, down]
+            
+        Returns:
+            Position in ENU frame as [east, north, up]
+        """
+        ned_pos = np.array(ned_position, dtype=float)
+        enu_pos = self.T_ned_to_enu @ ned_pos
+        return enu_pos
+    
+    def enu_to_ned_yaw(self, enu_yaw):
+        """
+        Transform yaw angle from ENU frame to NED frame.
+        
+        Args:
+            enu_yaw: Yaw angle in ENU frame (radians)
+            
+        Returns:
+            Yaw angle in NED frame (radians)
+        """
+        # Yaw is negated because Z-axis points in opposite direction
+        return -enu_yaw
+    
+    def ned_to_enu_yaw(self, ned_yaw):
+        """
+        Transform yaw angle from NED frame to ENU frame.
+        
+        Args:
+            ned_yaw: Yaw angle in NED frame (radians)
+            
+        Returns:
+            Yaw angle in ENU frame (radians)
+        """
+        # Yaw is negated because Z-axis points in opposite direction
+        return -ned_yaw
+
+
 def rotation_matrix_yaw(yaw):
     """Create a rotation matrix for yaw angle only."""
     cos_y = np.cos(yaw)

@@ -12,7 +12,7 @@ import numpy as np
 from collections import deque
 
 from kf_vio_pnp.kf_vio_pnp import VioAugmentedKalmanFilter, KFConfig
-from kf_vio_pnp.transform import Transform
+from kf_vio_pnp.transform import Transform, ENUtoNEDTransform
 
 class KFNode(Node):
     def __init__(self):
@@ -59,6 +59,8 @@ class KFNode(Node):
                 self.get_parameter('initial_pos_z').value
             ]
         )
+        
+        self.enu_to_ned = ENUtoNEDTransform()
         
         # Init param and variable
         self.init_vel = [0.0, 0.0, 0.0]
@@ -309,9 +311,14 @@ class KFNode(Node):
         msg = VehicleOdometry()
         msg.timestamp = int(t * 1e6)
         
+        # ENU to NED transformation
+        p_ned = self.enu_to_ned.enu_to_ned(p)
+        v_ned = self.enu_to_ned.enu_to_ned(v)
+        self.yaw = self.enu_to_ned.enu_to_ned_yaw(self.yaw)
+        
         # Convert p, v to float32
-        msg.position = np.array(p, dtype=np.float32)
-        msg.velocity = np.array(v, dtype=np.float32)
+        msg.position = np.array(p_ned, dtype=np.float32)
+        msg.velocity = np.array(v_ned, dtype=np.float32)
         
         # Convert yaw to quaternion
         quat = self.transform.yaw_to_quaternion(self.yaw)
