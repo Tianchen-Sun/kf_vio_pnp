@@ -312,8 +312,8 @@ class KFNode(Node):
         msg.timestamp = int(t * 1e6)
         
         # ENU to NED transformation
-        p_ned = self.enu_to_ned.enu_to_ned(p)
-        v_ned = self.enu_to_ned.enu_to_ned(v)
+        p_ned = self.enu_to_ned.enu_to_ned_position(p)
+        v_ned = self.enu_to_ned.enu_to_ned_position(v)
         self.yaw = self.enu_to_ned.enu_to_ned_yaw(self.yaw)
         
         # Convert p, v to float32
