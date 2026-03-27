@@ -34,6 +34,9 @@ class VioAugmentedKalmanFilter:
       p' = p + v*dt + 0.5*(a_imu)*dt^2
       v' = v + a_imu*dt
       b' = b (random walk)
+
+      if there is no new IMU, No process update (dt=0), 
+      but we can still do measurement updates with the last state and bias.
     """
 
     def __init__(self, cfg: KFConfig):
@@ -115,6 +118,7 @@ class VioAugmentedKalmanFilter:
 
         return F, Q
 
+
     def predict_with_imu(self, t_now: float, accel_meas: np.ndarray):
         """
         Predict state using IMU acceleration measurement as input.
@@ -155,6 +159,7 @@ class VioAugmentedKalmanFilter:
         self.t = float(t_now)
         self.last_accel_meas = accel_meas
 
+
     def _update(self, z, H, R):
         """Standard Kalman filter measurement update (Joseph form)"""
         z = np.asarray(z, dtype=float).reshape(-1, 1)
@@ -173,6 +178,7 @@ class VioAugmentedKalmanFilter:
         I = np.eye(self.P.shape[0], dtype=float)
         IKH = I - K @ H
         self.P = IKH @ self.P @ IKH.T + K @ R @ K.T
+
 
     def update_vio(self, vio_pos, vio_vel):
         """
@@ -207,6 +213,7 @@ class VioAugmentedKalmanFilter:
             
         self._update(z, H, R)
 
+
     def update_pnp(self, pnp_pos):
         """
         PnP measurement update (high-confidence position).
@@ -228,6 +235,7 @@ class VioAugmentedKalmanFilter:
         ]).astype(float)
 
         self._update(z, H, R)
+
 
     def process_event(self, event, accel_meas=None):
         """

@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
@@ -77,13 +78,18 @@ class KFNode(Node):
         self.bias_log_path = None
 
         # Subscribers
-        # IMU subscription - get linear acceleration
-        self.sub_imu = self.create_subscription(
-            VehicleLocalPosition,
-            '/fmu/out/vehicle_local_position',
-            self.imu_callback,
-            10
+        px4_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
         )
+        # IMU subscription - get linear acceleration
+        # self.sub_imu = self.create_subscription(
+        #     VehicleLocalPosition,
+        #     '/fmu/out/vehicle_local_position',
+        #     self.imu_callback,
+        #     px4_qos
+        # )
 
         self.sub_vio = self.create_subscription(
             Odometry,
@@ -123,22 +129,6 @@ class KFNode(Node):
 
         self.get_logger().info("KF Node initialized")
 
-    def imu_callback(self, msg: VehicleLocalPosition):
-        """
-        IMU callback to get linear acceleration.
-        
-        Args:
-            msg: VehicleLocalPosition message containing ax, ay, az
-        """
-        # Get timestamp
-        t = msg.timestamp / 1e6  # Convert from microseconds to seconds
-        
-        # Get linear acceleration from IMU [m/s^2]
-        accel_meas = np.array([msg.ax, msg.ay, msg.az], dtype=float)
-        
-        # Store for use in process_event
-        self.last_accel_meas = accel_meas
-        self.last_imu_time = t
 
     def should_skip_mocap(self, t):
         """
@@ -179,13 +169,23 @@ class KFNode(Node):
             self.get_logger().warn(f"Unknown mocap_mode: {self.mocap_mode}")
             return False
 
-    def start_bias_logging(self, t):
+
+    def init_log_bias(self, t):
         """Initialize CSV file for bias data logging"""
         try:
             # Get source code path directly
             # Get workspace root: install/share/kf_vio_pnp -> src/kf_vio_pnp/data/logs
             package_dir = get_package_share_directory('kf_vio_pnp')
-            workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(package_dir))))
+            workspace_root = os.path.dirname(
+                os.path.dirname(
+                    os.path.dirname(
+                        os.path.dirname(
+                            package_dir
+                        )
+                    )
+                )
+            )
+        
             self.get_logger().info(f"Workspace root: {workspace_root}")
             log_dir = os.path.join(workspace_root, 'src', 'kf_vio_pnp', 'data', 'logs')
             
@@ -204,6 +204,7 @@ class KFNode(Node):
         except Exception as e:
             self.get_logger().error(f"Failed to start bias logging: {e}")
     
+
     def log_bias(self, t):
         """Log current VIO bias state to CSV file"""
         if self.csv_writer is None:
@@ -216,6 +217,7 @@ class KFNode(Node):
         except Exception as e:
             self.get_logger().error(f"Failed to log bias: {e}")
 
+
     def stop_bias_logging(self):
         """Close CSV file"""
         if self.csv_file is not None:
@@ -225,34 +227,36 @@ class KFNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Failed to close bias log: {e}")
 
+
     def init_filter(self, t, pos, vel):
         self.kf.init_state(pos=pos, vel=vel, t0=t)
         self.initialized = True
-        self.start_bias_logging(t)
+        self.init_log_bias(t)
         self.get_logger().info(f"Kalman filter initialized at t={t}")
         self.get_logger().info(f"Rotation matrix from VIO to PnP:\n{self.transform.R_vio_to_pnp}")
 
 
-    def imu_callback(self, msg: VehicleLocalPosition):
-        """
-        IMU callback to get linear acceleration.
+    # def imu_callback(self, msg: VehicleLocalPosition):
+    #     """
+    #     IMU callback to get linear acceleration.
         
-        Args:
-            msg: VehicleLocalPosition message containing ax, ay, az
-        """
-        # Get timestamp
-        t = msg.timestamp / 1e6  # Convert from microseconds to seconds
+    #     Args:
+    #         msg: VehicleLocalPosition message containing ax, ay, az
+    #     """
+    #     # Get timestamp
+    #     t = msg.timestamp / 1e6  # Convert from microseconds to seconds
         
-        # Get linear acceleration from IMU [m/s^2]
-        accel_meas = np.array([msg.ax, msg.ay, msg.az], dtype=float)
+    #     # Get linear acceleration from IMU [m/s^2]
+    #     accel_meas = np.array([msg.ax, msg.ay, msg.az], dtype=float)
         
-        # Store for use in process_event
-        self.last_accel_meas = accel_meas
-        self.last_imu_time = t
+    #     # Store for use in process_event
+    #     self.last_accel_meas = accel_meas
+    #     self.last_imu_time = t
 
-        # update kalman filter with IMU measurement
-        if self.initialized:
-            self.kf.predict_with_imu(t, accel_meas)
+    #     # update kalman filter with IMU measurement
+    #     if self.initialized:
+    #         self.kf.predict_with_imu(t, accel_meas)
+
 
     def vio_callback(self, msg: Odometry):
         """
@@ -277,11 +281,11 @@ class KFNode(Node):
             return
 
         event = {"t": t, "type": "vio", "pos": pos_transformed, "vel": vel_transformed}
-        
         # Use IMU acceleration measurement from callback
         self.kf.process_event(event, accel_meas=self.last_accel_meas)
         self.publish_fused(t)
         self.log_bias(t)
+
 
     def pnp_callback(self, msg: PoseStamped):
         """
@@ -304,6 +308,7 @@ class KFNode(Node):
         self.kf.process_event(event, accel_meas=self.last_accel_meas)
         self.publish_fused(t)
         self.log_bias(t)
+
 
     def publish_fused(self, t):
         """Publish fused odometry estimate"""
@@ -328,6 +333,7 @@ class KFNode(Node):
         msg.q[3] = quat[3]
         
         self.pub_fused.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
