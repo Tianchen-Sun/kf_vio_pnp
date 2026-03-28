@@ -22,14 +22,18 @@ class KFNode(Node):
         # Declare parameters
         self.declare_parameter('vio_delay_compensation', True)
         self.declare_parameter('vio_delay_sec', 0.05)
-        self.declare_parameter('imu_accel_noise_std', 0.2)
         self.declare_parameter('vio_bias_rw_std', 0.01)
         self.declare_parameter('vio_pos_std', 0.20)
         self.declare_parameter('vio_vel_std', 0.30)
+        self.declare_parameter('imu_accel_noise_std', 0.2)
+        
         self.declare_parameter('pnp_pos_std', 0.03)
-        self.declare_parameter('initial_pos_x', 0.0)
-        self.declare_parameter('initial_pos_y', 0.0)
-        self.declare_parameter('initial_pos_z', 0.0)
+        
+        self.declare_parameter('init_pos_x', 0.0)
+        self.declare_parameter('init_pos_y', 0.0)
+        self.declare_parameter('init_pos_z', 0.0)
+        self.declare_parameter('init_yaw_rad', 0.0)
+        
         self.declare_parameter('mocap_as_pnp', False)
         self.declare_parameter('mocap_mode', 'continuous')
         self.declare_parameter('mocap_freq', 100.0)
@@ -46,6 +50,7 @@ class KFNode(Node):
             vio_delay_compensation=self.get_parameter('vio_delay_compensation').value,
             vio_delay_sec=self.get_parameter('vio_delay_sec').value
         )
+        
         self.mocap_as_pnp = self.get_parameter('mocap_as_pnp').value
         self.mocap_mode = self.get_parameter('mocap_mode').value
         self.mocap_freq = self.get_parameter('mocap_freq').value
@@ -53,11 +58,11 @@ class KFNode(Node):
         self.mocap_unavailable_duration = self.get_parameter('mocap_unavailable_duration').value
 
         self.transform = Transform(
-            vio_yaw_rel_pnp=-1.57,  # rad
+            vio_yaw_rel_pnp=self.get_parameter('init_yaw').value,  # rad
             vio_translation_rel_pnp=[
-                self.get_parameter('initial_pos_x').value,
-                self.get_parameter('initial_pos_y').value,
-                self.get_parameter('initial_pos_z').value
+                self.get_parameter('init_pos_x').value,
+                self.get_parameter('init_pos_y').value,
+                self.get_parameter('init_pos_z').value
             ]
         )
         
@@ -125,7 +130,11 @@ class KFNode(Node):
             )
 
         # Publisher for the fused state
-        self.pub_fused = self.create_publisher(VehicleOdometry, '/fmu/in/vehicle_visual_odometry', 10)
+        self.pub_fused = self.create_publisher(
+            VehicleOdometry, 
+            '/fmu/in/vehicle_visual_odometry', 
+            10
+        )
 
         self.get_logger().info("KF Node initialized")
 

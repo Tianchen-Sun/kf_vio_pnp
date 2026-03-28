@@ -14,7 +14,10 @@ class Transform:
         VIO frame pose relative to PnP frame.
         """
         self.vio_yaw_rel_pnp = vio_yaw_rel_pnp
-        self.vio_translation_rel_pnp = np.array(vio_translation_rel_pnp) if vio_translation_rel_pnp is not None else np.array([0.0, 0.0, 0.0])
+        if vio_translation_rel_pnp is not None:
+            self.vio_translation_rel_pnp = np.array(vio_translation_rel_pnp)
+        else:
+            self.vio_translation_rel_pnp = np.array([0.0, 0.0, 0.0])
         
         self._compute_rotation_matrices()
     

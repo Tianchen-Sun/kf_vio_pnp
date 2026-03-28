@@ -17,7 +17,8 @@ kf_vio_pnp_node:
     mocap_unavailable_duration: 10.0 # seconds
 
     # initial position for vio in pnp frame, unit (m)
-    initial_pos_x: 0.085
-    initial_pos_y: 0.060
-    initial_pos_z: 0.0
+    init_pos_x: 0.085
+    init_pos_y: 0.060
+    init_pos_z: 0.0
+    init_yaw_rad: -1.57
     
