@@ -7,10 +7,13 @@ kf_vio_pnp_node:
     vio_pos_std: 0.05
     vio_vel_std: 0.80
     pnp_pos_std: 0.03
-    accel_noise_std: 0.05 # std for accelerometer noise for the process model, unit (m/s^2)
+    accel_noise_std: 0.05 # std for a ccelerometer noise for the process model, unit (m/s^2)
 
-    # debug with mocap as pnp
-    mocap_as_pnp: true
+    # pnp feasible gate detection thresholds
+    gate_max_distance: 3.0 # threshold for max absolute distance in each axis (m)
+    gate_min_distance: 0.5 # threshold for max absolute distance in each axis (m)
+    
+    # debug with mocap 
     mocap_mode: 'periodic' # 'periodic' or 'downsample'
     mocap_freq: 10.0 # hz, assume the full freq of mocap is 100 hz
     mocap_available_duration: 2.0 # seconds

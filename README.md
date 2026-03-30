@@ -4,8 +4,7 @@
 
 - [ ] verify the msg timestamp
 - [ ] add data visualization
-- [ ] coordinate transformation
-- [ ] yaw publishing
+
 
 ## Dependency
 
