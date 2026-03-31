@@ -58,7 +58,7 @@ class KFNode(Node):
         self.mocap_unavailable_duration = self.get_parameter('mocap_unavailable_duration').value
 
         self.transform = Transform(
-            vio_yaw_rel_pnp=self.get_parameter('init_yaw').value,  # rad
+            vio_yaw_rel_pnp=self.get_parameter('init_yaw_rad').value,  # rad
             vio_translation_rel_pnp=[
                 self.get_parameter('init_pos_x').value,
                 self.get_parameter('init_pos_y').value,
